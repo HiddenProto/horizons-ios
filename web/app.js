@@ -73,8 +73,10 @@ async function boot() {
     py.unpackArchive(buf, "zip", { extractDir: GAME });
     py.FS.mkdirTree(GAME + "/stuff");
     const saved = Store.load();
+    loadUI();
+    applyUI();
     for (const [n, t] of Object.entries(saved)) {
-      if (typeof t !== "string") continue;
+      if (typeof t !== "string" || n === "ui.json") continue;
       py.FS.writeFile(GAME + "/stuff/" + n, t);
       disk[n] = t;
     }
@@ -107,6 +109,8 @@ const pick = { region: null, subject: null, mode: "normal" };
 function showStart(b) {
   b = b || call("boot");
   MENU = b.menu;
+  HEAD = null;
+  atmosphere(null);
   $("start").classList.remove("hidden");
   $("btn-continue").classList.toggle("hidden", !(b.has_save && !b.over));
   pick.region = pick.region || MENU.default_region;
@@ -225,11 +229,86 @@ function addCard(cmd, text) {
   requestAnimationFrame(() => card.scrollIntoView({ block: "start", behavior: "smooth" }));
 }
 
+// ---------------------------------------------------------------- look & feel
+const UI = { theme: "terminal", follow: true, size: "m" };
+function loadUI() {
+  try { Object.assign(UI, JSON.parse(Store.load()["ui.json"] || "{}")); } catch (e) { /* default */ }
+}
+function saveUI() { Store.save("ui.json", JSON.stringify(UI)); applyUI(); }
+function applyUI() {
+  const b = document.body;
+  b.classList.toggle("t-terminal", UI.theme !== "dossier");
+  b.classList.toggle("t-dossier", UI.theme === "dossier");
+  b.classList.toggle("fx", UI.theme !== "dossier" && UI.follow);
+  for (const s of ["s", "l", "xl"]) b.classList.toggle("size-" + s, UI.size === s);
+  atmosphere(HEAD);
+}
+
+const HOT_ZONES = new Set(["thermals", "furnace"]);
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+
+// The terminal takes on who is on the other end of the link and how that body is right now.
+// Everything here is mood, never information: all of it is already on the frame in numbers.
+function atmosphere(h) {
+  const b = document.body;
+  [...b.classList].filter((c) => /^(sub-|s-|r-)/.test(c)).forEach((c) => b.classList.remove(c));
+  const st = b.style;
+  if (!h || !h.sid || UI.theme === "dossier") {
+    ["--feel-filter", "--pain-a", "--static-a", "--tshadow", "--beat"].forEach((v) => st.removeProperty(v));
+    return;
+  }
+  b.classList.add("sub-" + h.sid, "r-" + (h.rkey || "outside"));
+  const on = (cls, cond) => { if (cond) b.classList.add(cls); };
+  on("s-destiny", h.destiny); on("s-final", h.final); on("s-night", h.night);
+  on("s-down", h.down); on("s-crisis", h.crisis); on("s-clarity", h.clarity);
+  on("s-over", h.over); on("s-edge", h.edge); on("s-weird-hi", h.weird > 70);
+  on("s-hot", HOT_ZONES.has(h.zone) || h.rkey === "core");
+  const f = h.feel || {};
+  const m = clamp((f.mood ?? 60) / 100, 0, 1), tired = clamp((f.fatigue ?? 0) / 100, 0, 1);
+  const blood = f.blood ?? 100, link = f.link ?? 100, pain = f.pain ?? 0, weird = h.weird ?? 0;
+  // 0041 is the one that goes all the way down, and the screen goes with it
+  const sat = h.sid === "0041" ? 0.15 + 1.0 * m : 0.45 + 0.7 * m;
+  let bright = 0.8 + 0.22 * m - 0.12 * tired - (blood < 60 ? (60 - blood) / 220 : 0);
+  if (h.night) bright -= 0.06;
+  let filter = `saturate(${sat.toFixed(2)}) brightness(${clamp(bright, 0.55, 1.1).toFixed(2)})`;
+  // 4400 has no second opinion to check the link against: a bad link is it going out of focus
+  if (h.sid === "4400" && link < 85) filter += ` blur(${((85 - link) / 85 * 1.4).toFixed(2)}px)`;
+  if (h.night) filter += " hue-rotate(-8deg)";
+  st.setProperty("--feel-filter", filter);
+  st.setProperty("--pain-a", (clamp((pain - 25) / 75, 0, 1) * 0.8).toFixed(2));
+  st.setProperty("--static-a", (link < 80 ? (80 - link) / 80 * 0.35 : 0).toFixed(2));
+  const ab = weird > 30 ? (weird - 30) / 70 * 2.2 : 0;
+  st.setProperty("--tshadow", ab > 0.1
+    ? `${(-ab).toFixed(1)}px 0 rgba(255,40,80,.45), ${ab.toFixed(1)}px 0 rgba(40,220,255,.45), 0 0 5px var(--glow)`
+    : "0 0 5px var(--glow)");
+  st.setProperty("--beat", (1.3 - clamp((f.strain ?? 0) / 100, 0, 1) * 0.7).toFixed(2) + "s");
+}
+
+function lookSheet() {
+  sheet("LOOK & FEEL", (b) => {
+    const group = (label, key, opts) => {
+      b.appendChild(el("div", "label", esc(label)));
+      const row = el("div", "chips");
+      for (const [v, name] of opts) {
+        const c = el("button", "chip" + (UI[key] === v ? " on" : ""), esc(name));
+        c.onclick = () => { UI[key] = v; saveUI(); [...row.children].forEach((x) => x.classList.toggle("on", x === c)); };
+        row.appendChild(c);
+      }
+      b.appendChild(row);
+    };
+    group("THEME", "theme", [["terminal", "terminal"], ["dossier", "paper dossier"]]);
+    group("THE SCREEN FOLLOWS IT", "follow", [[true, "yes - subject, feeling, place"], [false, "no - plain amber"]]);
+    b.appendChild(el("p", "", "When it follows, the terminal takes on whichever subject the chip is seated in and bends with how it is right now - and with where it is. Terminal theme only."));
+    group("TEXT SIZE", "size", [["s", "small"], ["m", "medium"], ["l", "large"], ["xl", "extra large"]]);
+  });
+}
+
 function apply(r, cmd) {
   if (r.error) { addCard(cmd, r.error); return; }
   C = r.choices || {};
   HEAD = r.head || HEAD;
   addCard(cmd, r.text || "");
+  atmosphere(HEAD);
   drawHead();
   drawContext();
   drawTabs();
@@ -533,12 +612,27 @@ $("btn-menu").onclick = () => {
   sheet("MENU", (b) => {
     const g = el("div", "grid");
     g.appendChild(btn("new run", "pick subject & place", () => { closeSheet(); showStart(); }));
+    g.appendChild(btn("look & feel", "theme, text size", () => lookSheet()));
     g.appendChild(btn("status", "full readout", () => send("status", { raw: true })));
     g.appendChild(btn("help", "every command", () => send("help", { raw: true })));
     g.appendChild(btn("clear feed", "", () => { $("feed").innerHTML = ""; closeSheet(); resume(); }));
     b.appendChild(g);
   });
 };
+
+// iPad with a keyboard: 1-9 pick what is in front of it, Enter types an order, Esc closes
+document.addEventListener("keydown", (e) => {
+  const typing = /^(INPUT|TEXTAREA)$/.test((e.target && e.target.tagName) || "");
+  if (e.key === "Escape") { closeSheet(); return; }
+  if (typing || e.metaKey || e.ctrlKey || e.altKey || !C || !$("start").classList.contains("hidden")) return;
+  if (!$("sheet").classList.contains("hidden")) return;
+  if (/^[1-9]$/.test(e.key)) {
+    const cards = [...document.querySelectorAll("#context .opt")];
+    const pickable = cards.filter((c) => c.querySelector(".n"));
+    const t = (pickable.length ? pickable : cards)[+e.key - 1];
+    if (t) { e.preventDefault(); t.click(); }
+  } else if (e.key === "Enter") { e.preventDefault(); typeSheet(); }
+});
 
 drawTabs();
 boot();

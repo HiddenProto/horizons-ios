@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="theme-color" content="#0b0a09">
+<meta name="theme-color" content="#050403">
 <title>Horizons</title>
 <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body class="t-terminal fx">
 
 <div id="boot" class="overlay">
   <img class="emblem" src="emblem.png" alt="">
@@ -45,12 +45,24 @@
 
 <main id="feed"></main>
 
-<section id="context"></section>
+<aside id="side">
+  <section id="context"></section>
+  <nav id="dock">
+    <div id="tabs" class="tabs"></div>
+    <div id="panel" class="panel"></div>
+  </nav>
+</aside>
 
-<nav id="dock">
-  <div id="tabs" class="tabs"></div>
-  <div id="panel" class="panel"></div>
-</nav>
+<div id="fx" aria-hidden="true">
+  <div class="fx-stars"></div>
+  <div class="fx-cold"></div>
+  <div class="fx-heat"></div>
+  <div class="fx-glow"></div>
+  <div class="fx-static"></div>
+  <div class="fx-pain"></div>
+  <div class="fx-vig"></div>
+  <div class="fx-scan"></div>
+</div>
 
 <div id="sheet" class="sheet hidden">
   <div class="sheet-card">

@@ -183,9 +183,22 @@ def _head(s):
         return {}
     sub = SUB.BY_ID.get(getattr(s, "subject", ""), {})
     reg = REG.BY_KEY.get(getattr(s, "region", ""), {})
+    try:
+        from hz import world as W
+        zone = W.zone(s).get("key", "")
+    except Exception:
+        zone = ""
+    # what the screen itself reacts to - atmosphere only, never information the frame hides
     return {"subject": sub.get("name", ""), "sid": getattr(s, "subject", ""),
-            "region": reg.get("name", ""), "destiny": bool(getattr(s, "destiny", False)),
-            "turn": s.turn, "clock": s.clock}
+            "region": reg.get("name", ""), "rkey": getattr(s, "region", ""), "zone": zone,
+            "destiny": bool(getattr(s, "destiny", False)), "final": bool(REG.on_final(s)),
+            "turn": s.turn, "clock": s.clock, "night": bool(s.night),
+            "weird": round(float(s.weird)), "crisis": bool(s.crisis), "down": bool(LK.is_down(s)),
+            "clarity": bool(s.eff("clarity")), "over": bool(s.over),
+            "edge": float(getattr(s, "snap", 0.0) or 0.0) > 45.0,
+            "feel": {"mood": round(s.mood), "pain": round(s.pain), "fatigue": round(s.fatigue),
+                     "blood": round(s.blood), "strain": round(s.strain), "link": round(s.chip),
+                     "snap": round(float(getattr(s, "snap", 0.0) or 0.0))}}
 
 
 # ------------------------------------------------------------------ calls from the page
