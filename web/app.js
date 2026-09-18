@@ -41,19 +41,38 @@ const Store = {
     if (this.native) { window.webkit.messageHandlers.hzsave.postMessage({ name, content }); return; }
     try { localStorage.setItem("hz:stuff:" + name, content); } catch (e) { /* full or blocked */ }
   },
+  remove(name) {
+    if (this.native) { window.webkit.messageHandlers.hzsave.postMessage({ name, remove: true }); return; }
+    try { localStorage.removeItem("hz:stuff:" + name); } catch (e) { /* blocked */ }
+  },
 };
 const disk = {};
 
+// Every file the game writes under stuff/ goes to the device after every turn, and a file the
+// game deleted is deleted there too - so closing the app at any point loses nothing.
 function syncOut() {
   let names = [];
   try { names = py.FS.readdir(GAME + "/stuff"); } catch (e) { return; }
+  const seen = new Set();
   for (const n of names) {
     if (n === "." || n === ".." || n.endsWith(".tmp")) continue;
+    seen.add(n);
     let t;
     try { t = py.FS.readFile(GAME + "/stuff/" + n, { encoding: "utf8" }); } catch (e) { continue; }
     if (disk[n] !== t) { disk[n] = t; Store.save(n, t); }
   }
+  for (const n of Object.keys(disk)) {
+    if (!seen.has(n)) { delete disk[n]; Store.remove(n); }
+  }
 }
+
+// The log on screen, kept alongside the save so reopening the app shows where you were.
+let FEED = [];
+function saveFeed() {
+  if (!HEAD) return;
+  Store.save("feed.json", JSON.stringify({ seed: HEAD.seed, sid: HEAD.sid, turn: HEAD.turn, cards: FEED.slice(-MAX_CARDS) }));
+}
+function clearFeed() { FEED = []; $("feed").innerHTML = ""; Store.remove("feed.json"); }
 
 function call(fn, ...args) {
   const r = JSON.parse(B[fn](...args));
@@ -76,7 +95,7 @@ async function boot() {
     loadUI();
     applyUI();
     for (const [n, t] of Object.entries(saved)) {
-      if (typeof t !== "string" || n === "ui.json") continue;
+      if (typeof t !== "string" || n === "ui.json" || n === "feed.json") continue;   // the page's, not the game's
       py.FS.writeFile(GAME + "/stuff/" + n, t);
       disk[n] = t;
     }
@@ -100,6 +119,17 @@ async function boot() {
 function resume() {
   const r = call("current");
   $("feed").innerHTML = "";
+  FEED = [];
+  let kept = null;
+  try { kept = JSON.parse(Store.load()["feed.json"] || "null"); } catch (e) { kept = null; }
+  const h = r.head || {};
+  if (kept && kept.seed === h.seed && kept.sid === h.sid && kept.turn === h.turn && (kept.cards || []).length) {
+    // same body, same turn: put the log back exactly as it was left
+    for (const c of kept.cards) { FEED.push(c); addCard(c.cmd, c.text, true); }
+    C = r.choices || {}; HEAD = h;
+    atmosphere(HEAD); drawHead(); drawContext(); drawTabs(); drawPanel();
+    return;
+  }
   apply(r, null);
 }
 
@@ -173,7 +203,7 @@ $("btn-new").onclick = () => {
     const r = call("new_run", pick.region, pick.subject, pick.mode === "destiny", pick.mode === "final", null);
     if (r.error) { sheet("NOT OPEN", (b) => b.appendChild(el("p", "", esc(r.error)))); return; }
     $("start").classList.add("hidden");
-    $("feed").innerHTML = "";
+    clearFeed();
     force = false;
     apply(r, null);
   };
@@ -213,7 +243,9 @@ function renderFrame(text) {
   return pre;
 }
 
-function addCard(cmd, text) {
+function addCard(cmd, text, restoring) {
+  if (!restoring) FEED.push({ cmd: cmd || null, text: String(text) });
+  if (FEED.length > MAX_CARDS) FEED = FEED.slice(-MAX_CARDS);
   const feed = $("feed");
   for (const old of feed.querySelectorAll(".turn")) old.classList.add("old");
   const card = el("div", "turn");
@@ -245,6 +277,56 @@ function applyUI() {
 }
 
 const HOT_ZONES = new Set(["thermals", "furnace"]);
+
+// Neutral is a plain black terminal. Colour comes in only as it stops feeling neutral: towards
+// the subject's own colour when it is good, towards its own kind of bad when it is not (cold
+// and drained for most, red for the two that go hot). It covers the whole screen, not the log.
+const NEUTRAL = { text: "#c9c9c4", accent: "#ecece6" };
+const HUES = {
+  "2008": { hi: "#ffb454", lo: "#7a8aa0" },
+  "1278": { hi: "#d8f5cf", lo: "#7f8c86" },
+  "101":  { hi: "#ff8a5c", lo: "#d0463a" },
+  "0041": { hi: "#ffc2a6", lo: "#56607a" },
+  "7":    { hi: "#7dff8a", lo: "#5f8a6a" },
+  "3350": { hi: "#6ff0ff", lo: "#6a7f9c" },
+  "682":  { hi: "#ff84e4", lo: "#ff3b3b" },
+  "680":  { hi: "#e9eef3", lo: "#6d7378" },
+  "681":  { hi: "#ffb454", lo: "#7a8aa0" },
+  "4400": { hi: "#a9cbff", lo: "#6e7890" },
+};
+const PALETTE_VARS = ["--text", "--accent", "--dim", "--faint", "--line", "--bg", "--panel", "--panel2", "--glow", "--voice"];
+const rgb = (hx) => [1, 3, 5].map((i) => parseInt(hx.slice(i, i + 2), 16));
+const hex = (c) => "#" + c.map((v) => Math.round(clamp(v, 0, 255)).toString(16).padStart(2, "0")).join("");
+const mix = (a, b, t) => { const A = rgb(a), B = rgb(b); return hex(A.map((v, i) => v + (B[i] - v) * t)); };
+
+function moodPalette(h, mood) {
+  const st = document.body.style;
+  const hue = HUES[h.sid] || HUES["2008"];
+  const up = clamp((mood - 58) / 32, 0, 1), down = clamp((44 - mood) / 34, 0, 1);   // 44-58 is neutral
+  const target = up ? hue.hi : hue.lo, k = up || down;
+  let text = mix(NEUTRAL.text, target, 0.95 * k);
+  let bg = mix("#000000", target, (up ? 0.07 : 0.05) * k);
+  if (down) text = mix(text, bg, 0.25 * down);                 // low is dimmer, not just colder
+  let accent = mix(NEUTRAL.accent, mix(target, "#ffffff", up ? 0.3 : 0.1), k);
+  if (h.crisis) accent = "#ff5a44";
+  const env = h.destiny || h.final;                             // the place owns the background there
+  const set = (k2, v) => st.setProperty(k2, v);
+  set("--text", text);
+  set("--accent", h.down ? mix(bg, text, 0.58) : accent);
+  set("--dim", mix(bg, text, 0.58));
+  set("--faint", mix(bg, text, 0.38));
+  set("--voice", mix(text, "#ffffff", 0.25));
+  const [r, g, b] = rgb(text);
+  set("--glow", `rgba(${r},${g},${b},${(0.5 * up + 0.15 * down).toFixed(2)})`);
+  for (const v of ["--bg", "--panel", "--panel2", "--line"]) st.removeProperty(v);
+  if (!env) {
+    set("--bg", bg);
+    set("--panel", mix(bg, text, 0.045));
+    set("--panel2", mix(bg, text, 0.07));
+    set("--line", mix(bg, text, 0.22));
+  }
+  if (h.over) PALETTE_VARS.forEach((v) => st.removeProperty(v));
+}
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 
 // The terminal takes on who is on the other end of the link and how that body is right now.
@@ -253,8 +335,8 @@ function atmosphere(h) {
   const b = document.body;
   [...b.classList].filter((c) => /^(sub-|s-|r-)/.test(c)).forEach((c) => b.classList.remove(c));
   const st = b.style;
-  if (!h || !h.sid || UI.theme === "dossier") {
-    ["--feel-filter", "--pain-a", "--static-a", "--tshadow", "--beat"].forEach((v) => st.removeProperty(v));
+  if (!h || !h.sid || UI.theme === "dossier" || !UI.follow) {
+    ["--feel-filter", "--pain-a", "--static-a", "--tshadow", "--beat", ...PALETTE_VARS].forEach((v) => st.removeProperty(v));
     return;
   }
   b.classList.add("sub-" + h.sid, "r-" + (h.rkey || "outside"));
@@ -264,13 +346,12 @@ function atmosphere(h) {
   on("s-over", h.over); on("s-edge", h.edge); on("s-weird-hi", h.weird > 70);
   on("s-hot", HOT_ZONES.has(h.zone) || h.rkey === "core");
   const f = h.feel || {};
-  const m = clamp((f.mood ?? 60) / 100, 0, 1), tired = clamp((f.fatigue ?? 0) / 100, 0, 1);
+  const tired = clamp((f.fatigue ?? 0) / 100, 0, 1);
   const blood = f.blood ?? 100, link = f.link ?? 100, pain = f.pain ?? 0, weird = h.weird ?? 0;
-  // 0041 is the one that goes all the way down, and the screen goes with it
-  const sat = h.sid === "0041" ? 0.15 + 1.0 * m : 0.45 + 0.7 * m;
-  let bright = 0.8 + 0.22 * m - 0.12 * tired - (blood < 60 ? (60 - blood) / 220 : 0);
+  moodPalette(h, f.mood ?? 50);
+  let bright = 1 - 0.12 * tired - (blood < 60 ? (60 - blood) / 220 : 0);
   if (h.night) bright -= 0.06;
-  let filter = `saturate(${sat.toFixed(2)}) brightness(${clamp(bright, 0.55, 1.1).toFixed(2)})`;
+  let filter = `brightness(${clamp(bright, 0.55, 1.05).toFixed(2)})`;
   // 4400 has no second opinion to check the link against: a bad link is it going out of focus
   if (h.sid === "4400" && link < 85) filter += ` blur(${((85 - link) / 85 * 1.4).toFixed(2)}px)`;
   if (h.night) filter += " hue-rotate(-8deg)";
@@ -297,8 +378,8 @@ function lookSheet() {
       b.appendChild(row);
     };
     group("THEME", "theme", [["terminal", "terminal"], ["dossier", "paper dossier"]]);
-    group("THE SCREEN FOLLOWS IT", "follow", [[true, "yes - subject, feeling, place"], [false, "no - plain amber"]]);
-    b.appendChild(el("p", "", "When it follows, the terminal takes on whichever subject the chip is seated in and bends with how it is right now - and with where it is. Terminal theme only."));
+    group("THE SCREEN FOLLOWS IT", "follow", [[true, "yes - subject, feeling, place"], [false, "no - plain black"]]);
+    b.appendChild(el("p", "", "When it follows, the terminal is plain black while the subject feels nothing in particular, and the whole screen takes on colour as that changes - its own colour when it is good, its own kind of bad when it is not - and picks up where it is. Terminal theme only."));
     group("TEXT SIZE", "size", [["s", "small"], ["m", "medium"], ["l", "large"], ["xl", "extra large"]]);
   });
 }
@@ -308,6 +389,7 @@ function apply(r, cmd) {
   C = r.choices || {};
   HEAD = r.head || HEAD;
   addCard(cmd, r.text || "");
+  saveFeed();
   atmosphere(HEAD);
   drawHead();
   drawContext();
@@ -615,8 +697,17 @@ $("btn-menu").onclick = () => {
     g.appendChild(btn("look & feel", "theme, text size", () => lookSheet()));
     g.appendChild(btn("status", "full readout", () => send("status", { raw: true })));
     g.appendChild(btn("help", "every command", () => send("help", { raw: true })));
-    g.appendChild(btn("clear feed", "", () => { $("feed").innerHTML = ""; closeSheet(); resume(); }));
+    g.appendChild(btn("clear log", "keeps the run", () => { clearFeed(); closeSheet(); resume(); }));
     b.appendChild(g);
+    b.appendChild(el("p", "", "The run saves after every order. Close the app whenever you like - it will be exactly where you left it."));
+    const g2 = el("div", "grid");
+    g2.appendChild(btn("end this run", "unlocks are kept", () => confirmSheet(
+      "Leave this body where it is. The run is gone; everything you have unlocked stays.",
+      "end the run", () => { const r = call("end_run"); clearFeed(); showStart(r); }), "warn"));
+    g2.appendChild(btn("erase everything", "run, unlocks, wins", () => confirmSheet(
+      "Wipe the run AND every region, history, Destiny and Final you have opened. This cannot be undone.",
+      "erase it all", () => { const r = call("erase_all"); clearFeed(); showStart(r); }), "warn"));
+    b.appendChild(g2);
   });
 };
 

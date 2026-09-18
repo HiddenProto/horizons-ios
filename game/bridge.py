@@ -192,7 +192,7 @@ def _head(s):
     return {"subject": sub.get("name", ""), "sid": getattr(s, "subject", ""),
             "region": reg.get("name", ""), "rkey": getattr(s, "region", ""), "zone": zone,
             "destiny": bool(getattr(s, "destiny", False)), "final": bool(REG.on_final(s)),
-            "turn": s.turn, "clock": s.clock, "night": bool(s.night),
+            "turn": s.turn, "clock": s.clock, "night": bool(s.night), "seed": s.seed,
             "weird": round(float(s.weird)), "crisis": bool(s.crisis), "down": bool(LK.is_down(s)),
             "clarity": bool(s.eff("clarity")), "over": bool(s.over),
             "edge": float(getattr(s, "snap", 0.0) or 0.0) > 45.0,
@@ -278,6 +278,31 @@ def do(cmd):
                 % (type(e).__name__, e))
     s.save()
     return _out(text=text, choices=choices(s), head=_head(s))
+
+
+def end_run():
+    """Walk away from this body. What has been unlocked stays unlocked."""
+    from hz.state import SAVE_PATH
+    for p in (SAVE_PATH, SAVE_PATH + ".tmp"):
+        try:
+            os.remove(p)
+        except OSError:
+            pass
+    return boot()
+
+
+def erase_all():
+    """Everything: the run, the unlocks, the wins, the Final's slot, the histories read."""
+    from hz.state import SAVE_DIR
+    try:
+        for f in os.listdir(SAVE_DIR):
+            try:
+                os.remove(os.path.join(SAVE_DIR, f))
+            except OSError:
+                pass
+    except OSError:
+        pass
+    return boot()
 
 
 def lore(sid):

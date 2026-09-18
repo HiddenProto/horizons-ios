@@ -123,8 +123,13 @@ static NSString *MimeFor(NSString *ext) {
     if (![msg.body isKindOfClass:[NSDictionary class]]) return;
     NSString *name = msg.body[@"name"];
     NSString *content = msg.body[@"content"];
-    if (![name isKindOfClass:[NSString class]] || ![content isKindOfClass:[NSString class]] || !SafeName(name)) return;
+    if (![name isKindOfClass:[NSString class]] || !SafeName(name)) return;
     NSString *path = [SavesDir() stringByAppendingPathComponent:name];
+    if ([msg.body[@"remove"] boolValue]) {
+        [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
+        return;
+    }
+    if (![content isKindOfClass:[NSString class]]) return;
     [content writeToFile:path atomically:YES encoding:NSUTF8StringEncoding error:nil];
 }
 

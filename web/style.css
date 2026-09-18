@@ -7,21 +7,22 @@
  * The Dossier theme is the paper alternative. Fonts are ones iOS already has.
  */
 :root {
-  --bg: #050403;
-  --panel: #0b0907;
-  --panel2: #0f0c09;
-  --line: #3a2a16;
-  --text: #ffb454;
-  --dim: #a8743a;
-  --faint: #6a4a26;
-  --accent: #ffcc70;
-  --on-accent: #0a0602;
+  /* neutral: a plain black terminal. Colour only comes in when it stops feeling neutral. */
+  --bg: #000000;
+  --panel: #070707;
+  --panel2: #0b0b0b;
+  --line: #262626;
+  --text: #c9c9c4;
+  --dim: #7a7a76;
+  --faint: #4a4a48;
+  --accent: #ececE6;
+  --on-accent: #000000;
   --danger: #ff5a44;
   --warn: #ffe066;
   --ok: #8dff9e;
   --chip: #6fd3ff;
-  --voice: #ffd9a8;
-  --glow: rgba(255, 170, 70, .45);
+  --voice: #e8e4d8;
+  --glow: transparent;
   --radius: 0;
   --f-ui: ui-monospace, Menlo, "SF Mono", Consolas, "Courier New", monospace;
   --f-mono: ui-monospace, Menlo, "SF Mono", Consolas, "Courier New", monospace;
@@ -236,25 +237,15 @@ body.fx.s-edge .fx-pain { opacity: max(var(--pain-a, 0), .35); animation: pulse 
 
 /* ---------------------------------------------------------------- the subject on the other end */
 /* a palette and a habit each; nothing here is information the frame does not already give */
-body.fx.sub-2008 { --text: #ffb454; --dim: #a8743a; --accent: #ffcc70; --line: #3a2a16; --glow: rgba(255, 170, 70, .45); }
-body.fx.sub-1278 { --text: #d6ecd0; --dim: #7d8f78; --accent: #f0fff0; --line: #26332a; --glow: rgba(200, 255, 200, .18); --chip: #b8d8ff; }
-body.fx.sub-101 { --text: #ff8a5c; --dim: #a8553a; --accent: #ffb08f; --line: #3e1f14; --glow: rgba(255, 110, 60, .5); }
 body.fx.sub-101 #feed { animation: argue 9s steps(1) infinite; }
 @keyframes argue { 0%, 96% { opacity: 1; } 97% { opacity: .82; } 98% { opacity: 1; } 99% { opacity: .9; } }
-body.fx.sub-0041 { --text: #ffc6ae; --dim: #b08574; --accent: #ffe0d2; --line: #3a2622; --glow: rgba(255, 170, 150, .6); --voice: #fff0e6; --bg: #080506; }
-body.fx.sub-7 { --text: #7dff8a; --dim: #3f9a4a; --accent: #b6ffbf; --line: #173a1c; --glow: rgba(90, 255, 110, .5); --bg: #020602; --chip: #c8ffcf; }
 body.fx.sub-7 .fx-scan { background: repeating-linear-gradient(0deg, rgba(0, 0, 0, .35) 0 2px, transparent 2px 4px); }
-body.fx.sub-3350 { --text: #6ff0ff; --dim: #3a8f99; --accent: #b5f8ff; --line: #143a40; --glow: rgba(90, 230, 255, .5); --bg: #02060a; --chip: #ffd27a; }
 body.fx.sub-3350 .frame { animation: beat var(--beat, 1.1s) ease-in-out infinite; }
 @keyframes beat { 0%, 70%, 100% { text-shadow: var(--tshadow); } 12% { text-shadow: 0 0 9px var(--glow), 0 0 2px var(--glow); } }
-body.fx.sub-682 { --text: #ff84e4; --dim: #9a4a88; --accent: #7af0ff; --line: #3a1636; --glow: rgba(255, 110, 230, .45); --bg: #07030a; --chip: #7af0ff; }
 body.fx.sub-682 .fx-scan { animation: jitter 3.7s steps(1) infinite; }
 @keyframes jitter { 0%, 92% { transform: none; } 93% { transform: translateX(3px); } 95% { transform: translateX(-2px); } 97% { transform: translateY(1px); } }
-body.fx.sub-680 { --text: #d0d4d8; --dim: #6c7176; --accent: #ffffff; --line: #26292c; --glow: transparent; --bg: #040505; --chip: #aab4be; --voice: #9aa0a6; }
-body.fx.sub-681 { --text: #ffb454; --dim: #a8743a; --accent: #ffcc70; --line: #3a2a16; --glow: rgba(255, 170, 70, .45); }
 body.fx.sub-681 #feed { animation: mask 23s steps(1) infinite; }
 @keyframes mask { 0%, 98.6% { filter: var(--feel-filter, none); } 98.7% { filter: var(--feel-filter, none) hue-rotate(170deg) saturate(1.6); } 99.1% { filter: var(--feel-filter, none); } }
-body.fx.sub-4400 { --text: #e6f0ff; --dim: #7f8fa8; --accent: #9fc4ff; --line: #1c2536; --glow: rgba(170, 200, 255, .35); --bg: #03050a; --chip: #ffe4a0; }
 
 /* ---------------------------------------------------------------- the place it is in */
 body.fx.s-destiny { --bg: #05030c; --panel: #0a0716; --panel2: #0e0a1e; --line: #2c2250; --accent: #c7a4ff; --chip: #7fe6ff; }
