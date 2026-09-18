@@ -48,14 +48,22 @@ static NSString *MimeFor(NSString *ext) {
 - (void)webView:(WKWebView *)webView startURLSchemeTask:(id<WKURLSchemeTask>)task {
     NSString *path = task.request.URL.path;
     if (path.length == 0 || [path isEqualToString:@"/"]) path = @"/index.html";
+    // No stringByStandardizingPath here: on a device the bundle lives under /private/var/...,
+    // standardizing strips the /private off one side only, and every request then looked like
+    // it was escaping the bundle - which served nothing at all. Refuse '..' instead.
     NSString *root = [[[NSBundle mainBundle] resourcePath] stringByAppendingPathComponent:@"web"];
-    NSString *file = [[root stringByAppendingPathComponent:path] stringByStandardizingPath];
-    NSData *data = [file hasPrefix:root] ? [NSData dataWithContentsOfFile:file] : nil;
+    NSString *file = [root stringByAppendingPathComponent:path];
+    NSData *data = [path containsString:@".."] ? nil : [NSData dataWithContentsOfFile:file];
     if (!data) {
+        NSString *msg = [NSString stringWithFormat:
+            @"<html><body style='background:#000;color:#ff5a44;font:14px Menlo;padding:40px'>"
+             "HORIZONS could not find a file inside the app:<br><br>%@</body></html>", path];
+        NSData *body = [msg dataUsingEncoding:NSUTF8StringEncoding];
         NSHTTPURLResponse *r = [[NSHTTPURLResponse alloc] initWithURL:task.request.URL statusCode:404
-                                                          HTTPVersion:@"HTTP/1.1" headerFields:@{}];
+                                                          HTTPVersion:@"HTTP/1.1"
+                                                         headerFields:@{@"Content-Type": @"text/html"}];
         [task didReceiveResponse:r];
-        [task didReceiveData:[NSData data]];
+        [task didReceiveData:body];
         [task didFinish];
         return;
     }
@@ -73,7 +81,7 @@ static NSString *MimeFor(NSString *ext) {
 @end
 
 // ---------------------------------------------------------------- the one screen
-@interface GameController : UIViewController <WKScriptMessageHandler>
+@interface GameController : UIViewController <WKScriptMessageHandler, WKNavigationDelegate>
 @property (nonatomic, strong) WKWebView *web;
 @end
 
@@ -115,6 +123,8 @@ static NSString *MimeFor(NSString *ext) {
     self.web.scrollView.backgroundColor = bg;
     self.web.scrollView.bounces = NO;
     self.web.scrollView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
+    self.web.navigationDelegate = self;
+    if (@available(iOS 16.4, *)) { self.web.inspectable = YES; }
     [self.view addSubview:self.web];
     [self.web loadRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:@"hzapp://local/index.html"]]];
 }
@@ -132,6 +142,17 @@ static NSString *MimeFor(NSString *ext) {
     if (![content isKindOfClass:[NSString class]]) return;
     [content writeToFile:path atomically:YES encoding:NSUTF8StringEncoding error:nil];
 }
+
+// never a silent black screen: if the page itself cannot load, say why
+- (void)showError:(NSError *)error {
+    NSString *html = [NSString stringWithFormat:
+        @"<html><body style='background:#000;color:#ff5a44;font:14px Menlo;padding:40px'>"
+         "HORIZONS did not start.<br><br>%@</body></html>", error.localizedDescription];
+    [self.web loadHTMLString:html baseURL:nil];
+}
+- (void)webView:(WKWebView *)w didFailProvisionalNavigation:(WKNavigation *)n withError:(NSError *)e { [self showError:e]; }
+- (void)webView:(WKWebView *)w didFailNavigation:(WKNavigation *)n withError:(NSError *)e { [self showError:e]; }
+- (void)webViewWebContentProcessDidTerminate:(WKWebView *)w { [w reload]; }
 
 - (UIStatusBarStyle)preferredStatusBarStyle { return UIStatusBarStyleLightContent; }
 - (BOOL)prefersHomeIndicatorAutoHidden { return YES; }

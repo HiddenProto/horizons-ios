@@ -75,6 +75,14 @@
   </div>
 </div>
 
+<script>
+  // anything that breaks before the game is up gets written on the loading screen, not swallowed
+  window.onerror = function (msg, src, line) {
+    var m = document.getElementById("boot-msg");
+    if (m) m.textContent = "the chip did not seat.\n\n" + msg + (src ? "\n" + src.split("/").pop() + ":" + line : "");
+  };
+  window.addEventListener("unhandledrejection", function (e) { window.onerror(String(e.reason && e.reason.message || e.reason)); });
+</script>
 <script src="pyodide/pyodide.js"></script>
 <script src="app.js"></script>
 </body>
