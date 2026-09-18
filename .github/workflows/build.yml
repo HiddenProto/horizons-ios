@@ -1,0 +1,27 @@
+name: build-ipa
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  ipa:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build unsigned IPA
+        run: bash tools/build_ipa.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Horizons-ipa
+          path: Horizons.ipa
+      - name: Publish to the rolling 'latest' release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view latest >/dev/null 2>&1 || gh release create latest --title "Horizons (latest build)" --notes "Unsigned IPA - install with Sideloadly."
+          gh release upload latest Horizons.ipa --clobber

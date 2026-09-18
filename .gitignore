@@ -1,0 +1,6 @@
+web/pyodide/
+web/game.zip
+build/
+Horizons.ipa
+__pycache__/
+*.pyc

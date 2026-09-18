@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0b0a09">
+<title>Horizons</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="boot" class="overlay">
+  <img class="emblem" src="emblem.png" alt="">
+  <div class="boot-title">HORIZONS</div>
+  <div id="boot-msg" class="boot-msg">seating the chip…</div>
+</div>
+
+<div id="start" class="overlay hidden">
+  <div class="start-inner">
+    <img class="emblem small" src="emblem.png" alt="">
+    <h1>HORIZONS</h1>
+    <p class="sub">Subject register. Choose a body and a place, then seat the chip.</p>
+    <button id="btn-continue" class="big hidden">Continue the run</button>
+    <div class="label">WHERE</div>
+    <div id="pick-region" class="chips"></div>
+    <div class="label">SUBJECTS THE CHIP CAN BE SEATED IN</div>
+    <div id="pick-subject" class="ledger"></div>
+    <div id="pick-mode" class="chips"></div>
+    <p class="fine">The file says nothing about any of them beyond the number, and neither will
+      the chip. They are not the same to drive. You find that out by driving them.</p>
+    <button id="btn-new" class="big accent">Seat the chip</button>
+    <div id="lore-row" class="hidden">
+      <div class="label">HISTORY</div>
+      <div id="pick-lore" class="chips"></div>
+    </div>
+  </div>
+</div>
+
+<header id="top">
+  <div class="brand">HORIZONS</div>
+  <div id="head" class="head"></div>
+  <button id="btn-menu" class="icon" aria-label="Menu">☰</button>
+</header>
+
+<main id="feed"></main>
+
+<section id="context"></section>
+
+<nav id="dock">
+  <div id="tabs" class="tabs"></div>
+  <div id="panel" class="panel"></div>
+</nav>
+
+<div id="sheet" class="sheet hidden">
+  <div class="sheet-card">
+    <div class="sheet-head">
+      <div id="sheet-title"></div>
+      <button id="sheet-close" class="icon" aria-label="Close">✕</button>
+    </div>
+    <div id="sheet-body"></div>
+  </div>
+</div>
+
+<script src="pyodide/pyodide.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
