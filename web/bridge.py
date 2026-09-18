@@ -85,6 +85,17 @@ def _mobile(text):
     return _QUOTED.sub(_button, text)
 
 
+def _steps(fix):
+    """'use marrow, then rest' -> ['use marrow', 'rest']: each one a button. Anything that is
+    not an order ('there is no fix', 'answer what it asks') is left as words."""
+    out = []
+    for part in re.split(r",\s*then\s+|\s+then\s+|,\s*or\s+", fix or ""):
+        part = re.sub(r"\(.*?\)", "", part).strip(" .,")
+        if part and part.split(" ")[0] in VERBS and "<" not in part:
+            out.append(part)
+    return out
+
+
 def _clean(text):
     """The CMDS footer is for someone typing. Here the buttons are the command list."""
     text = text.replace(R.QUICK + " | leave", "").replace(R.QUICK, "")
@@ -136,9 +147,23 @@ def choices(s):
         return c
     c["down"] = bool(LK.is_down(s))
     if s.crisis:
-        c["crisis"] = [{"cmd": cmd, "label": cmd, "sub": "%ds - %s" % (cost, what)}
+        cr = s.crisis
+        c["crisis"] = [{"cmd": cmd, "label": cmd, "sub": "%ds - %s" % (cost, what), "cost": cost}
                        for cmd, cost, what in CR.ACTION_HELP]
+        kind = CR.KINDS.get(cr.get("kind"), {})
+        c["crisis_info"] = {"kind": cr.get("kind"), "label": kind.get("label", ""),
+                            "why": kind.get("why", ""), "left": float(cr.get("left", 0)),
+                            "total": float(cr.get("total", 40) or 40), "pumps": int(cr.get("pumps", 0)),
+                            "air": int(cr.get("air", 0)), "cause": cr.get("cause", "")}
         return c
+    from hz import issues as ISS
+    c["issues"] = [{"label": it.get("label", ""), "limb": it.get("limb"),
+                    "desc": ISS.TYPES.get(it.get("kind"), {}).get("desc", ""),
+                    "fix": it.get("fix", ""), "steps": _steps(it.get("fix", ""))}
+                   for it in s.issues]
+    c["timers"] = [{"label": t.get("label", ""), "left": int(t.get("left", 0)),
+                    "hint": _mobile(t.get("hint", ""))}
+                   for t in sorted(s.timers, key=lambda x: x["left"])]
     if s.scene:
         c["scene"] = [{"cmd": str(i), "label": str(o)}
                       for i, o in enumerate(s.scene.get("opts") or [], 1)]
@@ -195,6 +220,7 @@ def _head(s):
             "turn": s.turn, "clock": s.clock, "night": bool(s.night), "seed": s.seed,
             "weird": round(float(s.weird)), "crisis": bool(s.crisis), "down": bool(LK.is_down(s)),
             "clarity": bool(s.eff("clarity")), "over": bool(s.over),
+            "asleep": s.activity == "sleeping", "resting": s.activity == "resting",
             "edge": float(getattr(s, "snap", 0.0) or 0.0) > 45.0,
             "feel": {"mood": round(s.mood), "pain": round(s.pain), "fatigue": round(s.fatigue),
                      "blood": round(s.blood), "strain": round(s.strain), "link": round(s.chip),

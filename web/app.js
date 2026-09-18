@@ -82,6 +82,15 @@ function call(fn, ...args) {
 
 // ---------------------------------------------------------------- boot
 function bootMsg(t) { $("boot-msg").textContent = t; }
+function fadeOut(node) {
+  node.classList.add("fading");
+  setTimeout(() => { node.classList.add("hidden"); node.classList.remove("fading"); }, 420);
+}
+function fadeIn(node) {
+  node.classList.remove("hidden");
+  node.classList.add("fading");
+  requestAnimationFrame(() => requestAnimationFrame(() => node.classList.remove("fading")));
+}
 
 async function boot() {
   try {
@@ -104,7 +113,7 @@ async function boot() {
     B = py.pyimport("bridge");
     const b = call("boot");
     MENU = b.menu;
-    $("boot").classList.add("hidden");
+    fadeOut($("boot"));
     if (b.has_save && !b.over) {
       resume();
     } else {
@@ -141,7 +150,7 @@ function showStart(b) {
   MENU = b.menu;
   HEAD = null;
   atmosphere(null);
-  $("start").classList.remove("hidden");
+  fadeIn($("start"));
   $("btn-continue").classList.toggle("hidden", !(b.has_save && !b.over));
   pick.region = pick.region || MENU.default_region;
   pick.subject = pick.subject || MENU.default_subject;
@@ -197,12 +206,12 @@ function drawStart() {
   }
 }
 
-$("btn-continue").onclick = () => { $("start").classList.add("hidden"); resume(); };
+$("btn-continue").onclick = () => { fadeOut($("start")); resume(); };
 $("btn-new").onclick = () => {
   const go = () => {
     const r = call("new_run", pick.region, pick.subject, pick.mode === "destiny", pick.mode === "final", null);
     if (r.error) { sheet("NOT OPEN", (b) => b.appendChild(el("p", "", esc(r.error)))); return; }
-    $("start").classList.add("hidden");
+    fadeOut($("start"));
     clearFeed();
     force = false;
     apply(r, null);
@@ -229,19 +238,25 @@ function lineClass(ln) {
   return "";
 }
 
-function renderFrame(text) {
-  const pre = el("pre", "frame");
+// Each line is its own block so a new frame can come in line by line, like a terminal printing
+// it, instead of appearing all at once. The whole reveal is capped under a second.
+function renderFrame(text, animate) {
+  const box = el("div", "frame" + (animate ? " typing" : ""));
+  const lines = String(text).split("\n");
+  const step = animate ? Math.min(24, 850 / Math.max(1, lines.length)) : 0;
   const out = [];
-  for (const ln of String(text).split("\n")) {
+  lines.forEach((ln, i) => {
     const c = lineClass(ln);
-    if (c === "rule") { out.push('<span class="rule"></span>'); continue; }
+    const d = animate ? ` style="animation-delay:${Math.round(i * step)}ms"` : "";
+    if (c === "rule") { out.push(`<span class="ln rule"${d}></span>`); return; }
     const body = esc(ln).replace(/\[([A-Z][A-Z0-9 ]*(?: [a-z][a-z0-9 ]*)?)\]/g, '<span class="kbd">$1</span>');
-    out.push(c ? `<span class="${c}">${body}</span>` : body);
-  }
-  pre.innerHTML = out.join("\n").replace(/<\/span>\n<span class="rule"><\/span>\n?/g, '</span><span class="rule"></span>')
-    .replace(/\n?<span class="rule"><\/span>\n?/g, '<span class="rule"></span>');
-  return pre;
+    out.push(`<span class="ln ${c}"${d}>${body || "&nbsp;"}</span>`);
+  });
+  box.innerHTML = out.join("");
+  return box;
 }
+// a tap on the log finishes the printing at once
+$("feed").addEventListener("click", () => document.querySelectorAll(".frame.typing").forEach((f) => f.classList.remove("typing")));
 
 function addCard(cmd, text, restoring) {
   if (!restoring) FEED.push({ cmd: cmd || null, text: String(text) });
@@ -255,7 +270,8 @@ function addCard(cmd, text, restoring) {
       ? `ORDER — ${esc(cmd.slice(9))} <span class="forced">FORCED</span>`
       : `ORDER — ${esc(cmd)}`));
   }
-  card.appendChild(renderFrame(text));
+  if (!restoring) card.classList.add("enter");
+  card.appendChild(renderFrame(text, !restoring));
   feed.appendChild(card);
   while (feed.children.length > MAX_CARDS) feed.removeChild(feed.firstChild);
   requestAnimationFrame(() => card.scrollIntoView({ block: "start", behavior: "smooth" }));
@@ -308,6 +324,12 @@ function moodPalette(h, mood) {
   let bg = mix("#000000", target, (up ? 0.07 : 0.05) * k);
   if (down) text = mix(text, bg, 0.25 * down);                 // low is dimmer, not just colder
   let accent = mix(NEUTRAL.accent, mix(target, "#ffffff", up ? 0.3 : 0.1), k);
+  // asleep: the screen goes where it goes - pale, lavender, soft, whatever the mood was
+  if (h.asleep && !h.crisis) {
+    text = mix(text, "#dcd4ff", 0.6); bg = mix(bg, "#0b0818", 0.85); accent = mix(accent, "#f4e9ff", 0.7);
+  } else if (h.resting && !h.crisis) {
+    text = mix(text, bg, 0.14);
+  }
   if (h.crisis) accent = "#ff5a44";
   const env = h.destiny || h.final;                             // the place owns the background there
   const set = (k2, v) => st.setProperty(k2, v);
@@ -317,7 +339,7 @@ function moodPalette(h, mood) {
   set("--faint", mix(bg, text, 0.38));
   set("--voice", mix(text, "#ffffff", 0.25));
   const [r, g, b] = rgb(text);
-  set("--glow", `rgba(${r},${g},${b},${(0.5 * up + 0.15 * down).toFixed(2)})`);
+  set("--glow", `rgba(${r},${g},${b},${(h.asleep ? 0.6 : 0.5 * up + 0.15 * down).toFixed(2)})`);
   for (const v of ["--bg", "--panel", "--panel2", "--line"]) st.removeProperty(v);
   if (!env) {
     set("--bg", bg);
@@ -345,6 +367,7 @@ function atmosphere(h) {
   on("s-down", h.down); on("s-crisis", h.crisis); on("s-clarity", h.clarity);
   on("s-over", h.over); on("s-edge", h.edge); on("s-weird-hi", h.weird > 70);
   on("s-hot", HOT_ZONES.has(h.zone) || h.rkey === "core");
+  on("s-dream", h.asleep && !h.crisis); on("s-rest", h.resting && !h.crisis);
   const f = h.feel || {};
   const tired = clamp((f.fatigue ?? 0) / 100, 0, 1);
   const blood = f.blood ?? 100, link = f.link ?? 100, pain = f.pain ?? 0, weird = h.weird ?? 0;
@@ -433,12 +456,53 @@ function optBtn(cls, n, label, sub, onclick) {
   return b;
 }
 
+let lastCrisisPct = null;
+
 function section(label, items) {
   const box = $("context");
   box.appendChild(el("div", "ctx-label", esc(label)));
   const row = el("div", "ctx-row");
-  items.forEach((i) => row.appendChild(i));
+  items.forEach((i, n) => { i.style.animationDelay = n * 45 + "ms"; row.appendChild(i); });
   box.appendChild(row);
+}
+
+// what is wrong with it and what fixes each one, one tap per step
+function fixStep(step, limb) {
+  const verb = step.split(" ")[0];
+  if (verb === "persuade" && step === "persuade") { persuadeSheet(); return; }
+  if ((verb === "tend" || verb === "graft") && step === verb) { limbSheet(verb); return; }
+  send(step, { raw: true });
+}
+
+function issuesSheet() {
+  sheet("WHAT IS WRONG", (b) => {
+    const iss = (C && C.issues) || [], tim = (C && C.timers) || [];
+    if (!iss.length && !tim.length) b.appendChild(el("p", "", "Nothing, right now."));
+    for (const it of iss) {
+      const card = el("div", "issue");
+      card.appendChild(el("div", "i-title", esc(it.label) + (it.limb ? ` <span>[${esc(it.limb)}]</span>` : "")));
+      if (it.desc) card.appendChild(el("div", "i-desc", esc(it.desc)));
+      card.appendChild(el("div", "i-fix", "fix: " + esc(it.fix)));
+      if ((it.steps || []).length) {
+        const row = el("div", "chips");
+        it.steps.forEach((st, n) => {
+          const c = el("button", "chip", (it.steps.length > 1 ? n + 1 + ". " : "") + esc(st));
+          c.onclick = () => fixStep(st, it.limb);
+          row.appendChild(c);
+        });
+        card.appendChild(row);
+      }
+      b.appendChild(card);
+    }
+    if (tim.length) {
+      b.appendChild(el("div", "label", "ON A COUNTDOWN"));
+      for (const t of tim) {
+        b.appendChild(el("div", "issue" + (t.left <= 2 ? " urgent" : ""),
+          `<div class="i-title">${esc(t.label)} <span>${t.left} turn${t.left === 1 ? "" : "s"}</span></div>` +
+          `<div class="i-fix">${esc(t.hint)}</div>`));
+      }
+    }
+  });
 }
 
 function drawContext() {
@@ -452,9 +516,37 @@ function drawContext() {
     return;
   }
   if (force) section("FORCING THE NEXT ORDER", [optBtn("crisis", null, "stop forcing", "send orders normally", () => { force = false; drawContext(); drawTabs(); drawPanel(); })]);
+  document.body.classList.toggle("in-crisis", !!C.crisis);
   if (C.crisis) {
-    section("IT IS DOWN - EVERY SECOND COUNTS", C.crisis.map((a) => optBtn("crisis", null, a.label, a.sub, () => send(a.cmd, { raw: true }))));
+    // the forty seconds: what is wrong, how much residual power is left, what has landed
+    const ci = C.crisis_info || {};
+    const pct = clamp((ci.left || 0) / (ci.total || 40) * 100, 0, 100);
+    const panel = el("div", "crisis-box",
+      `<div class="c-title">${esc((ci.label || "DOWN").toUpperCase())}</div>` +
+      (ci.why ? `<div class="c-why">${esc(ci.why)}</div>` : "") +
+      `<div class="c-bar"><i style="width:${lastCrisisPct ?? pct}%"></i></div>` +
+      `<div class="c-meta"><b>${Math.max(0, Math.round(ci.left || 0))}s</b> of residual power` +
+      ` · pumps landed ${ci.pumps || 0} · breaths ${ci.air || 0}${C.down ? " · <b>NO LINK</b>" : ""}</div>`);
+    box.appendChild(panel);
+    requestAnimationFrame(() => { const i = panel.querySelector(".c-bar i"); if (i) i.style.width = pct + "%"; });
+    lastCrisisPct = pct;
+    section("WHAT THE CHIP CAN DO", C.crisis.map((a) => optBtn("crisis" + (a.cost > (ci.left || 0) ? " short" : ""),
+      null, a.label, a.sub, () => send(a.cmd, { raw: true }))));
     return;
+  }
+  lastCrisisPct = null;
+  const iss = C.issues || [], tim = C.timers || [];
+  if (iss.length || tim.length) {
+    const strip = el("div", "strip");
+    if (iss.length) {
+      const b = el("button", "stat bad", `⚠ ${iss.length} issue${iss.length > 1 ? "s" : ""}`);
+      b.onclick = issuesSheet; strip.appendChild(b);
+    }
+    for (const t of tim.slice(0, 3)) {
+      const b = el("button", "stat" + (t.left <= 2 ? " bad" : ""), `⏱ ${esc(t.label)} · ${t.left}`);
+      b.onclick = issuesSheet; strip.appendChild(b);
+    }
+    box.appendChild(strip);
   }
   if (C.down) section("THE LINK IS DOWN", [optBtn("crisis", null, "reconnect", "re-seat the link - costs time, can fail", () => send("reconnect", { raw: true }))]);
   if (C.question) section("IT ASKED YOU", C.question.map((o, i) => optBtn("q", i + 1, o.label, null, () => send(o.cmd, { raw: true }))));
@@ -471,8 +563,10 @@ function drawTabs() {
   const T = $("tabs");
   T.innerHTML = "";
   for (const [k, name] of TABS) {
-    const b = el("button", "tab" + (tab === k ? " on" : "") + (k === "chip" && force ? " force" : ""), name);
-    b.onclick = () => { if (k === "type") { typeSheet(); return; } tab = k; drawTabs(); drawPanel(); };
+    const n = k === "body" && C && C.issues ? C.issues.length : 0;
+    const b = el("button", "tab" + (tab === k ? " on" : "") + (k === "chip" && force ? " force" : ""),
+      name + (n ? ` <span class="badge">${n}</span>` : ""));
+    b.onclick = () => { if (k === "type") { typeSheet(); return; } tab = k; drawTabs(); drawPanel(true); };
     T.appendChild(b);
   }
 }
@@ -490,11 +584,14 @@ function worstLimb() {
   return L[0];
 }
 
-function drawPanel() {
+function drawPanel(swap) {
   const P = $("panel");
   P.innerHTML = "";
+  P.classList.remove("swap");
+  if (swap) { void P.offsetWidth; P.classList.add("swap"); }
   if (!C || C.over) return;
-  const add = (...a) => P.appendChild(btn(...a));
+  let n = 0;
+  const add = (...a) => { const b = btn(...a); b.style.animationDelay = (n++) * 22 + "ms"; P.appendChild(b); };
   if (tab === "move") {
     add("go", "toward the horizon", () => send("go"), C.hint === "go" ? "lit" : "");
     add("look", "the situation", () => send("look"), C.hint === "look" ? "lit" : "");
@@ -546,9 +643,18 @@ function sheet(title, build) {
   const body = $("sheet-body");
   body.innerHTML = "";
   build(body);
-  $("sheet").classList.remove("hidden");
+  const sh = $("sheet");
+  clearTimeout(sheetTimer);
+  sh.classList.remove("hidden");
+  requestAnimationFrame(() => requestAnimationFrame(() => sh.classList.add("open")));
 }
-function closeSheet() { $("sheet").classList.add("hidden"); }
+let sheetTimer = 0;
+function closeSheet() {
+  const sh = $("sheet");
+  if (sh.classList.contains("hidden")) return;
+  sh.classList.remove("open");
+  sheetTimer = setTimeout(() => sh.classList.add("hidden"), 230);
+}
 $("sheet-close").onclick = closeSheet;
 $("sheet").addEventListener("click", (e) => { if (e.target === $("sheet")) closeSheet(); });
 
